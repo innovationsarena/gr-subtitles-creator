@@ -1,0 +1,25 @@
+{
+  "name": "subtitles",
+  "version": "1.0.0",
+  "description": "Transcribe MP4 files using OpenAI Whisper API",
+  "main": "transcribe.js",
+  "scripts": {
+    "start": "node transcribe.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "transcription",
+    "whisper",
+    "openai",
+    "mp4"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "openai": "^4.0.0",
+    "cli-progress": "^3.12.0",
+    "fluent-ffmpeg": "^2.1.2"
+  }
+}
