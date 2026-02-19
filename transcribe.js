@@ -54,6 +54,35 @@ function convertToSrt(segments) {
   return srtContent;
 }
 
+function formatTimestampVtt(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds % 1) * 1000);
+
+  return `${hours.toString().padStart(2, "0")}:${minutes
+    .toString()
+    .padStart(2, "0")}:${secs.toString().padStart(2, "0")}.${ms
+    .toString()
+    .padStart(3, "0")}`;
+}
+
+function convertToVtt(segments, width) {
+  let vttContent = "WEBVTT\n\n";
+  const sizeSetting = width ? ` size:${width}%` : "";
+
+  segments.forEach((segment, index) => {
+    const startTime = formatTimestampVtt(segment.start);
+    const endTime = formatTimestampVtt(segment.end);
+
+    vttContent += `${index + 1}\n`;
+    vttContent += `${startTime} --> ${endTime}${sizeSetting}\n`;
+    vttContent += `${segment.text.trim()}\n\n`;
+  });
+
+  return vttContent;
+}
+
 async function transcribeVideo(filePath, progressBar) {
   try {
     if (!fs.existsSync(filePath)) {
@@ -114,14 +143,15 @@ function findMp4Files(folderPath) {
   return files;
 }
 
-async function processSingleFile(filePath, fileIndex, totalFiles) {
+async function processSingleFile(filePath, fileIndex, totalFiles, width) {
   const fileName = path.basename(filePath, ".mp4");
   const fileDir = path.dirname(filePath);
   const srtPath = path.join(fileDir, `${fileName}.srt`);
+  const vttPath = path.join(fileDir, `${fileName}.vtt`);
 
-  // Skip if SRT already exists
-  if (fs.existsSync(srtPath)) {
-    console.log(`⏭️  Skipping ${fileName} (SRT already exists)`);
+  // Skip if both SRT and VTT already exist
+  if (fs.existsSync(srtPath) && fs.existsSync(vttPath)) {
+    console.log(`⏭️  Skipping ${fileName} (SRT and VTT already exist)`);
     return;
   }
 
@@ -139,15 +169,21 @@ async function processSingleFile(filePath, fileIndex, totalFiles) {
   try {
     const result = await transcribeVideo(filePath, progressBar);
 
-    progressBar.update(90, { stage: "Creating SRT file..." });
+    progressBar.update(85, { stage: "Creating SRT file..." });
 
     const srtContent = convertToSrt(result.segments);
     fs.writeFileSync(srtPath, srtContent);
+
+    progressBar.update(95, { stage: "Creating VTT file..." });
+
+    const vttContent = convertToVtt(result.segments, width);
+    fs.writeFileSync(vttPath, vttContent);
 
     progressBar.update(100, { stage: "Complete!" });
     progressBar.stop();
 
     console.log(`✅ Subtitles saved to: ${srtPath}`);
+    console.log(`✅ Subtitles saved to: ${vttPath}`);
   } catch (error) {
     progressBar.stop();
     console.error(`❌ Failed to process ${fileName}: ${error.message}`);
@@ -157,12 +193,26 @@ async function processSingleFile(filePath, fileIndex, totalFiles) {
 async function main() {
   const args = process.argv.slice(2);
 
-  if (args.length !== 1) {
-    console.log("Usage: node transcribe.js <path-to-folder>");
+  let width = null;
+  const positionalArgs = [];
+
+  for (const arg of args) {
+    const widthMatch = arg.match(/^--width=(\d+)$/);
+    if (widthMatch) {
+      width = parseInt(widthMatch[1], 10);
+    } else {
+      positionalArgs.push(arg);
+    }
+  }
+
+  if (positionalArgs.length !== 1) {
+    console.log(
+      "Usage: node transcribe.js <path-to-folder> [--width=<percent>]"
+    );
     process.exit(1);
   }
 
-  const folderPath = args[0];
+  const folderPath = positionalArgs[0];
 
   // Validate folder path
   if (!fs.existsSync(folderPath)) {
@@ -191,7 +241,7 @@ async function main() {
     console.log(`🎬 Found ${mp4Files.length} MP4 file(s) in: ${folderPath}`);
 
     for (let i = 0; i < mp4Files.length; i++) {
-      await processSingleFile(mp4Files[i], i + 1, mp4Files.length);
+      await processSingleFile(mp4Files[i], i + 1, mp4Files.length, width);
     }
 
     console.log(
